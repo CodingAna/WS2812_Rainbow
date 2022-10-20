@@ -45,15 +45,15 @@ def animate():
             buffer[offset + _ORDER[j]] = color[j]
     machine.bitstream(_PIN, 0, (400, 850, 800, 450), buffer)
 
-    _SPEED = 1.5
-    #_BUF_SKIP = (2**(_SPEED-1))*3
-    step = 0
+    _SPEED = 1
+    _BUF_SKIP = (2**(_SPEED-1))*3
+    # step = 0
 
     while True:
-        _BUF_SKIP = int(step)*3
+        # _BUF_SKIP = int(step)*3
         buffer = buffer[_BUF_SKIP:] + buffer[:_BUF_SKIP] # Shift rainbow buffer
         machine.bitstream(_PIN, 0, (400, 850, 800, 450), buffer) # Write buffer to strip
-        step += _SPEED
-        if (step == int(step)): step = 0
+        # step += _SPEED
+        # if (step == int(step)): step = 0
 
 animate()
