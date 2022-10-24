@@ -1,8 +1,4 @@
-import machine
-
-_LED_COUNT = 400
-_PIN_PORT = 2
-_PIN = machine.Pin(_PIN_PORT, machine.Pin.OUT)
+import machine, time
 
 def hsl_to_rgb(h, s, l): # Hue, Saturation, Lightness
     c = (1 - abs((2 * l) - 1)) * s # Chroma
@@ -18,42 +14,122 @@ def hsl_to_rgb(h, s, l): # Hue, Saturation, Lightness
     m = l - (c / 2)
     return ((r+m)*255, (g+m)*255, (b+m)*255)
 
-def animate():
-    # Init HSL values once for faster access
-    hsl_values = []
-    for _ in range(360):
-        hsl_values.append(hsl_to_rgb(_, 1, 0.5))
+# Init HSL values once for faster access
+_HSL_VALUES = []
+for _ in range(360):
+    _HSL_VALUES.append(hsl_to_rgb(_, 1, 0.5))
+
+_LED_COUNT = 400
+_DATA_OUT_PIN = machine.Pin(2, machine.Pin.OUT)
+_DATA_IN_PIN = machine.Pin(4, machine.Pin.IN)
+_CLOCK_IN_PIN = machine.Pin(12, machine.Pin.IN)
+_MASTER_IN_PIN = machine.Pin(13, machine.Pin.IN)
+
+_CLOCK_IN_PIN.irq(handler=lambda p: clock_tick(p))
+
+data_in_stream = ""
+volume = 0
+
+def clock_tick(p: machine.Pin):
+    global data_in_stream
+    global volume
+
+    #print("clock tick")
+
+    if not _MASTER_IN_PIN.value():
+        data_in_stream = "" # Reset data stream if master is low
+        return
+
+    #print("master is high")
     
+    # Continue if master is high
+    data_in_stream += str(_DATA_IN_PIN.value())
+
+    #print(data_in_stream)
+
+    if len(data_in_stream) == 10:
+        parity, data, inv_par = data_in_stream[0], data_in_stream[1:-1], data_in_stream[-1]
+        # true if odd number of 1's + high parity bit is given == if even number of 1's is given in data stream
+        if parity == inv_par:
+            print("Invalid inverted parity data")
+            return # Parity must have a inverted part
+        if (data.count("1") + int(parity)) % 2 == 0:
+            volume = int(data, 2)
+            print(data_in_stream + " --- Volume: " + str(volume))
+        data_in_stream = ""
+        return
+    
+    if len(data_in_stream) > 10:
+        data_in_stream = "" # Reset due to invalid data
+
+def animate_rainbow():
     # Create buffer with given (rgbw->grbw) order and 3 Bits Per Pixel
     _BPP = 3
     _ORDER = (1, 0, 2, 3)
     buffer = bytearray(_LED_COUNT * _BPP)
 
-    # Init with no color
+    # Set up first rainbow with brightness 40%
+    brightness = 0.4
     for i in range(_LED_COUNT):
-        color = (0, 0, 0)
+        color = [int(x*brightness) for x in _HSL_VALUES[int(((i+1) / _LED_COUNT) * len(_HSL_VALUES)) % 360]]
+        # color = [int(x) for x in _HSL_VALUES[int(i * (360 / _LED_COUNT)) % 360]]
         offset = i * _BPP
         for j in range(_BPP):
             buffer[offset + _ORDER[j]] = color[j]
-    machine.bitstream(_PIN, 0, (400, 850, 800, 450), buffer)
-
-    # Set up first rainbow
-    for i in range(_LED_COUNT):
-        color = [int(x) for x in hsl_values[int(i * (360 / _LED_COUNT)) % 360]]
-        offset = i * _BPP
-        for j in range(_BPP):
-            buffer[offset + _ORDER[j]] = color[j]
-    machine.bitstream(_PIN, 0, (400, 850, 800, 450), buffer)
+    machine.bitstream(_DATA_OUT_PIN, 0, (400, 850, 800, 450), buffer)
 
     _SPEED = 1
     _BUF_SKIP = (2**(_SPEED-1))*3
-    # step = 0
 
     while True:
-        # _BUF_SKIP = int(step)*3
         buffer = buffer[_BUF_SKIP:] + buffer[:_BUF_SKIP] # Shift rainbow buffer
-        machine.bitstream(_PIN, 0, (400, 850, 800, 450), buffer) # Write buffer to strip
-        # step += _SPEED
-        # if (step == int(step)): step = 0
+        machine.bitstream(_DATA_OUT_PIN, 0, (400, 850, 800, 450), buffer) # Write buffer to strip
+        start = time.time_ns()
+        while time.time_ns() - start < 1000*75:
+            pass
 
-animate()
+def animate_volume():
+    global volume
+
+    # Create buffer with given (rgbw->grbw) order and 3 Bits Per Pixel
+    _BPP = 3
+    _ORDER = (1, 0, 2, 3)
+    _EMPTY_BUFFER = bytearray(_LED_COUNT * _BPP)
+    buffer = bytearray(_LED_COUNT * _BPP)
+
+    # Clamp volume level from 0 to _LED_COUNT
+    if volume < 0: volume = 0
+    elif volume > _LED_COUNT: volume = _LED_COUNT
+    """prev_volume = volume - 1
+
+    while True:
+        if prev_volume != volume:
+            brightness = 0.4
+            for i in range(volume): # I can probably speed up the buffer creation process by just showing ... (see below)
+                color = [int(x*brightness) for x in _HSL_VALUES[int(((i+1) / _LED_COUNT) * len(_HSL_VALUES)) % 360]]
+                # color = [int(x) for x in hsl_values[int(i * (360 / _LED_COUNT)) % 360]]
+                offset = i * _BPP
+                for j in range(_BPP):
+                    buffer[offset + _ORDER[j]] = color[j]
+        # ... the buffer from 0 to 3*volume and adding bytearray(max length - 3*volume)
+        machine.bitstream(_DATA_OUT_PIN, 0, (400, 850, 800, 450), buffer) # Write buffer to strip
+        start = time.time_ns()
+        while time.time_ns() - start < 1000*75:
+            pass"""
+    
+    brightness = 0.4
+    for i in range(volume):
+        color = [int(x*brightness) for x in _HSL_VALUES[int(((i+1) / _LED_COUNT) * len(_HSL_VALUES)) % 360]]
+        offset = i * _BPP
+        for j in range(_BPP):
+            buffer[offset + _ORDER[j]] = color[j]
+
+    while True:
+        out_buffer = buffer[:3*volume] + _EMPTY_BUFFER[3*volume:]
+        machine.bitstream(_DATA_OUT_PIN, 0, (400, 850, 800, 450), out_buffer) # Write modified buffer to strip
+        start = time.time_ns()
+        while time.time_ns() - start < 1000*75:
+            pass
+
+#animate_rainbow()
+animate_volume()
