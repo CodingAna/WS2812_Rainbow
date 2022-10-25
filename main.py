@@ -47,20 +47,25 @@ def clock_tick(p: machine.Pin):
 
     #print(data_in_stream)
 
-    if len(data_in_stream) == 10:
-        parity, data, inv_par = data_in_stream[0], data_in_stream[1:-1], data_in_stream[-1]
+    if len(data_in_stream) == 12:
+        parity_0 = data_in_stream[0]
+        parity_1 = data_in_stream[-1]
+        data = data_in_stream[1:-1]
+        # parity, data, inv_par = data_in_stream[0], data_in_stream[1:-1], data_in_stream[-1]
         # true if odd number of 1's + high parity bit is given == if even number of 1's is given in data stream
-        if parity == inv_par:
-            print("Invalid inverted parity data")
-            return # Parity must have a inverted part
-        if (data.count("1") + int(parity)) % 2 == 0:
-            volume = int(data, 2)
-            print(data_in_stream + " --- Volume: " + str(volume))
+        if (not data[:5].count("1") % 2 == int(parity_0)) or (not data[5:].count("1") % 2 == int(parity_1)):
+            # print(parity_0 + " " + data + " " + parity_1 + " --- Invalid parity data. Skipping!")
+            return
+        
+        volume = int(data, 2)
+        # print(parity_0 + " " + data + " " + parity_1 + " --- Volume: " + str(volume))
         data_in_stream = ""
         return
     
-    if len(data_in_stream) > 10:
+    if len(data_in_stream) > 12:
+        # print("resetting due to invalid length")
         data_in_stream = "" # Reset due to invalid data
+        # data_in_stream = data_in_stream[-1] # Reset due to invalid data but keep newest received bit
 
 def animate_rainbow():
     # Create buffer with given (rgbw->grbw) order and 3 Bits Per Pixel
@@ -117,16 +122,35 @@ def animate_volume():
         while time.time_ns() - start < 1000*75:
             pass"""
     
-    brightness = 0.4
+    """brightness = 0.4
     for i in range(volume):
         color = [int(x*brightness) for x in _HSL_VALUES[int(((i+1) / _LED_COUNT) * len(_HSL_VALUES)) % 360]]
         offset = i * _BPP
         for j in range(_BPP):
+            buffer[offset + _ORDER[j]] = color[j]"""
+    
+    # Set up first rainbow with brightness 40%
+    brightness = 0.4
+    for i in range(_LED_COUNT):
+        color = [int(x*brightness) for x in _HSL_VALUES[int(((i+1) / _LED_COUNT) * len(_HSL_VALUES)) % 360]]
+        # color = [int(x) for x in _HSL_VALUES[int(i * (360 / _LED_COUNT)) % 360]]
+        offset = i * _BPP
+        for j in range(_BPP):
             buffer[offset + _ORDER[j]] = color[j]
 
+    # _SPEED = 1
+    # _BUF_SKIP = (2**(_SPEED-1))*3
+
+    # Maybe save the peak level (for like 10s) to have a variable maximum instead of 300 (see below)
+
+    # i = 0
     while True:
-        out_buffer = buffer[:3*volume] + _EMPTY_BUFFER[3*volume:]
+        # offset = (_BUF_SKIP * i) % (_LED_COUNT * _BPP)
+        # out_buffer = _EMPTY_BUFFER[3*volume:] + buffer[offset:offset+(3*volume)] # This animation is still kinda glitchy
+        out_vol = int((volume / 300) * _LED_COUNT)
+        out_buffer = _EMPTY_BUFFER[3*out_vol:] + buffer[:3*out_vol]
         machine.bitstream(_DATA_OUT_PIN, 0, (400, 850, 800, 450), out_buffer) # Write modified buffer to strip
+        # i += 1
         start = time.time_ns()
         while time.time_ns() - start < 1000*75:
             pass
