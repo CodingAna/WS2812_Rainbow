@@ -20,7 +20,7 @@ mcp.GPIO_1_OutputMode() # Clock
 mcp.GPIO_2_OutputMode() # Master
 mcp.GPIO_3_OutputMode() # Data
 
-# Init all values to LOW
+# Init all ports to LOW
 mcp.GPIO_1_Output(0)
 mcp.GPIO_2_Output(0)
 mcp.GPIO_3_Output(0)
@@ -38,29 +38,29 @@ with sd.Stream(callback=print_sound):
         while True:
             if len(global_volume) != 10: continue
 
+            # Parity: Must have even number of 1's in first (:5) and second half (5:), parity bits are 0 if even, else 1 to make even number
             parity_0 = "1" if global_volume[:5].count("1") % 2 else "0"
             parity_1 = "1" if global_volume[5:].count("1") % 2 else "0"
             stb = parity_0 + global_volume + parity_1
 
             mcp.GPIO_1_Output(0) # Reset clock
-            sleep_for_us(1000)
+            sleep_for_us(1000) # Wait 1ms just for safety
             mcp.GPIO_2_Output(1) # Set master HIGH
 
             high = True # Start with a HIGH cycle for the clock because it was reset to LOW
-            for char in stb: # sleep for a total of 2*15*10=300ms
+            for char in stb: # 12x cycles
                 sleep_for_us(15000) # 15ms
-                mcp.GPIO_3_Output(int(char)) # data HI/LO
+                mcp.GPIO_3_Output(int(char)) # data
                 sleep_for_us(15000) # 15ms
-                mcp.GPIO_1_Output(int(high)) # tick clock
+                mcp.GPIO_1_Output(int(high)) # clock
                 high = not high
 
-            print(parity_0 + " " + global_volume + " " + parity_1 + " --- Volume:" + str(int(stb[1:-1], 2)))
+            print(stb[0] + "-" + stb[1:-1] + "-" + stb[-1] + " --- Volume:" + str(int(stb[1:-1], 2)))
 
             sleep_for_us(10000) # 10ms
-            # total sleep time = 311ms
+            # total sleep time = (1+12*30+10)ms = 371ms
             mcp.GPIO_2_Output(0) # Reset master to low
 
     except KeyboardInterrupt: 
         print()
         print("Stop")
-    #sd.sleep(10000)
