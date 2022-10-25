@@ -13,7 +13,6 @@ def print_sound(indata, outdata, frames, time, status):
     global global_volume
 
     volume_norm = np.linalg.norm(indata)*10
-    # TODO: Make this at least 9bit because the volume gets above 255. Maybe even 10bit? == 12bit in total?
     global_volume = "{:010b}".format(int(volume_norm))
 
 mcp.GPIO_Init()
