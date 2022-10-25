@@ -36,10 +36,6 @@ sleep_for_us(1000*1000)
 with sd.Stream(callback=print_sound):
     try:
         while True:
-
-            # Add parity bit at front; 1/HIGH if odd number of 1's => stb has even number of 1's
-            # parity = ("1" if global_volume.count("1") % 2 else "0")
-            # stb = parity + global_volume + ("1" if parity == "0" else "0") # Add inverted parity bit
             if len(global_volume) != 10: continue
 
             parity_0 = "1" if global_volume[:5].count("1") % 2 else "0"
